@@ -14,8 +14,8 @@ This simulator visualizes the complete provisioning pipeline:
 
 ## Deployment Links
 
-Backend: https://puf-simulator.onrender.com/
-Frontend: 
+- Backend: https://puf-simulator.onrender.com/
+- Frontend: https://puf-simulator.vercel.app/
 
 ## Project Structure
 
