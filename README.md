@@ -12,6 +12,11 @@ This simulator visualizes the complete provisioning pipeline:
 5. **Provisioning** - Server sends encrypted credentials to device
 6. **Operation** - Secure bidirectional communication using AES-256-GCM
 
+## Deployment Links
+
+Backend: https://puf-simulator.onrender.com/
+Frontend: 
+
 ## Project Structure
 
 ```
