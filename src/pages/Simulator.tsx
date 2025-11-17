@@ -7,6 +7,8 @@ import { ControlPanel } from "@/components/simulator/ControlPanel";
 import { LogViewer } from "@/components/simulator/LogViewer";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import * as SimulationAPI from "@/services/simulationApi";
 
 export type StepStatus = 'idle' | 'running' | 'success' | 'error';
 export type SimulationStepId = 'S0_ENROLL' | 'S1_BOOT' | 'S2_AUTH' | 'S3_DH' | 'S4_PROVISION' | 'S5_OPERATION';
@@ -42,6 +44,7 @@ const initialSteps: SimulationStep[] = [
 
 const Simulator = () => {
   const navigate = useNavigate();
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'not-started' | 'active' | 'completed'>('not-started');
   const [steps, setSteps] = useState<SimulationStep[]>(initialSteps);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -63,95 +66,166 @@ const Simulator = () => {
     setLogs(prev => [...prev, newLog]);
   };
 
+  // Add logs from backend response
+  const addBackendLogs = (backendLogs: string[]) => {
+    backendLogs.forEach(logMessage => {
+      const source = SimulationAPI.parseLogSource(logMessage);
+      // Remove timestamp from backend logs if present (they have their own format)
+      const cleanMessage = logMessage.replace(/^\[\d{2}:\d{2}:\d{2}\.\d+\]\s*/, '');
+      addLog(source, cleanMessage);
+    });
+  };
+
   const updateStepStatus = (stepId: SimulationStepId, status: StepStatus) => {
     setSteps(prev => prev.map(step => 
       step.id === stepId ? { ...step, status } : step
     ));
   };
 
-  const resetSimulation = () => {
+  const resetSimulation = async () => {
+    if (sessionId) {
+      try {
+        await SimulationAPI.resetSession(sessionId);
+      } catch (error) {
+        console.error('Failed to reset session:', error);
+      }
+    }
+    
     setSteps(initialSteps);
     setCurrentStepIndex(0);
     setLogs([]);
     setSessionStatus('not-started');
+    setSessionId(null);
     addLog('SYSTEM', 'Simulation reset');
+    toast.info('Simulation reset');
   };
 
-  const initializeSession = () => {
-    setSessionStatus('active');
-    addLog('SYSTEM', `Session initialized for device ${deviceConfig.deviceId}`);
-    addLog('SYSTEM', `PUF Type: ${deviceConfig.pufType.toUpperCase()}, CRP Count: ${deviceConfig.crpCount}`);
+  const initializeSession = async () => {
+    try {
+      addLog('SYSTEM', `Initializing session for device ${deviceConfig.deviceId}...`);
+      
+      const response = await SimulationAPI.initSession(
+        deviceConfig.deviceId,
+        deviceConfig.pufType,
+        deviceConfig.crpCount
+      );
+      
+      setSessionId(response.sessionId);
+      setSessionStatus('active');
+      
+      addLog('SYSTEM', `✓ Session initialized: ${response.sessionId.slice(0, 8)}...`);
+      addLog('SYSTEM', `PUF Type: ${deviceConfig.pufType.toUpperCase()}, CRP Count: ${deviceConfig.crpCount}`);
+      toast.success('Session initialized successfully');
+    } catch (error) {
+      addLog('SYSTEM', `✗ Failed to initialize session: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error('Failed to initialize session');
+      throw error;
+    }
   };
 
   const runStep = async (stepId: SimulationStepId) => {
+    if (!sessionId) {
+      toast.error('No active session. Please initialize first.');
+      return;
+    }
+
     updateStepStatus(stepId, 'running');
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Simulate step execution
-    switch (stepId) {
-      case 'S0_ENROLL':
-        addLog('DEVICE', `PUF module initialized on ${deviceConfig.deviceId}`);
-        addLog('SERVER', `Generating ${deviceConfig.crpCount} Challenge-Response Pairs...`);
-        addLog('SERVER', `CRPs stored in database for device ${deviceConfig.deviceId}`);
-        break;
-      case 'S1_BOOT':
-        addLog('DEVICE', 'Device powered on');
-        addLog('DEVICE', 'PUF module warming up...');
-        addLog('DEVICE', 'Device ready for authentication');
-        break;
-      case 'S2_AUTH':
-        addLog('SERVER', 'Sending authentication challenge...');
-        addLog('DEVICE', 'Generating PUF response...');
-        addLog('SERVER', 'Response verified ✓ Authentication successful');
-        break;
-      case 'S3_DH':
-        addLog('DEVICE', 'Generating DH public key...');
-        addLog('SERVER', 'Generating DH public key...');
-        addLog('DH', 'Key exchange completed. Shared secret established');
-        break;
-      case 'S4_PROVISION':
-        addLog('PROVISIONING', 'Encrypting configuration data...');
-        addLog('SERVER', 'Transferring provisioning package...');
-        addLog('DEVICE', 'Configuration received and applied');
-        break;
-      case 'S5_OPERATION':
-        addLog('DEVICE', 'Entering normal operation mode');
-        addLog('SYSTEM', 'Device is now fully provisioned and operational');
-        break;
+    try {
+      let response: SimulationAPI.StepResponse;
+      
+      switch (stepId) {
+        case 'S0_ENROLL':
+          response = await SimulationAPI.runEnrollment(sessionId);
+          addBackendLogs(response.log);
+          toast.success('Enrollment completed');
+          break;
+          
+        case 'S1_BOOT':
+          // Boot is a frontend-only step (no backend call)
+          addLog('DEVICE', 'Device powered on');
+          addLog('DEVICE', 'PUF module warming up...');
+          await new Promise(resolve => setTimeout(resolve, 800));
+          addLog('DEVICE', 'Device ready for authentication');
+          break;
+          
+        case 'S2_AUTH':
+          response = await SimulationAPI.runAuthentication(sessionId);
+          addBackendLogs(response.log);
+          if (response.status === 'success') {
+            toast.success('Authentication successful');
+          } else {
+            toast.error('Authentication failed');
+          }
+          break;
+          
+        case 'S3_DH':
+          response = await SimulationAPI.runKeyExchange(sessionId);
+          addBackendLogs(response.log);
+          toast.success('Key exchange completed');
+          break;
+          
+        case 'S4_PROVISION':
+          response = await SimulationAPI.runProvisioning(sessionId);
+          addBackendLogs(response.log);
+          toast.success('Provisioning completed');
+          break;
+          
+        case 'S5_OPERATION':
+          response = await SimulationAPI.runOperation(sessionId);
+          addBackendLogs(response.log);
+          toast.success('Device operational');
+          break;
+      }
+      
+      updateStepStatus(stepId, 'success');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addLog('SYSTEM', `✗ Error in ${stepId}: ${errorMessage}`);
+      updateStepStatus(stepId, 'error');
+      toast.error(`Step failed: ${errorMessage}`);
+      throw error;
     }
-    
-    updateStepStatus(stepId, 'success');
   };
 
   const runFullSimulation = async () => {
-    if (sessionStatus === 'not-started') {
-      initializeSession();
+    try {
+      if (sessionStatus === 'not-started') {
+        await initializeSession();
+      }
+      
+      for (let i = 0; i < steps.length; i++) {
+        setCurrentStepIndex(i);
+        await runStep(steps[i].id);
+      }
+      
+      setSessionStatus('completed');
+      addLog('SYSTEM', '🎉 Full simulation completed successfully');
+      toast.success('Simulation completed!');
+    } catch (error) {
+      console.error('Simulation error:', error);
+      toast.error('Simulation failed');
     }
-    
-    for (let i = 0; i < steps.length; i++) {
-      setCurrentStepIndex(i);
-      await runStep(steps[i].id);
-    }
-    
-    setSessionStatus('completed');
-    addLog('SYSTEM', '🎉 Full simulation completed successfully');
   };
 
   const runNextStep = async () => {
-    if (sessionStatus === 'not-started') {
-      initializeSession();
-    }
-    
-    if (currentStepIndex < steps.length) {
-      await runStep(steps[currentStepIndex].id);
-      setCurrentStepIndex(prev => prev + 1);
-      
-      if (currentStepIndex === steps.length - 1) {
-        setSessionStatus('completed');
-        addLog('SYSTEM', '🎉 Simulation completed successfully');
+    try {
+      if (sessionStatus === 'not-started') {
+        await initializeSession();
       }
+      
+      if (currentStepIndex < steps.length) {
+        await runStep(steps[currentStepIndex].id);
+        setCurrentStepIndex(prev => prev + 1);
+        
+        if (currentStepIndex === steps.length - 1) {
+          setSessionStatus('completed');
+          addLog('SYSTEM', '🎉 Simulation completed successfully');
+          toast.success('Simulation completed!');
+        }
+      }
+    } catch (error) {
+      console.error('Step error:', error);
     }
   };
 

@@ -1,4 +1,34 @@
-# Welcome to your Lovable project
+# PUF-based Zero-Touch IoT Provisioning Simulator
+
+A full-stack application demonstrating how IoT devices can be securely provisioned using Physical Unclonable Functions (PUF) with zero-touch enrollment and authentication.
+
+## Project Overview
+
+This simulator visualizes the complete provisioning pipeline:
+1. **Enrollment** - Device generates and stores Challenge-Response Pairs (CRPs)
+2. **Boot** - Device powers on and initializes PUF module
+3. **Authentication** - Server verifies device identity using stored CRPs
+4. **Key Exchange** - Diffie-Hellman protocol establishes shared session key
+5. **Provisioning** - Server sends encrypted credentials to device
+6. **Operation** - Secure bidirectional communication using AES-256-GCM
+
+## Project Structure
+
+```
+puf-sim-workbench/
+├── src/                    # React frontend (Vite + TypeScript)
+│   ├── components/         # UI components
+│   ├── pages/             # Page components
+│   └── ...
+├── server/                 # Node.js backend (Express + TypeScript)
+│   ├── src/
+│   │   ├── index.ts       # Express server entry point
+│   │   ├── simulation.ts  # Core PUF simulation logic
+│   │   └── types.ts       # TypeScript type definitions
+│   ├── package.json
+│   └── tsconfig.json
+└── ...
+```
 
 ## Project info
 
@@ -36,6 +66,82 @@ npm i
 npm run dev
 ```
 
+## Running the Backend Server
+
+The simulator requires both frontend and backend to be running simultaneously.
+
+### Backend Setup
+
+1. **Navigate to the server directory:**
+   ```bash
+   cd server
+   ```
+
+2. **Install backend dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Start the backend server:**
+   ```bash
+   npm run dev
+   ```
+
+   The backend will start on `http://localhost:4000` with hot-reloading enabled.
+
+### Frontend Setup
+
+1. **In a new terminal, navigate to the project root:**
+   ```bash
+   cd ..  # or navigate to project root
+   ```
+
+2. **Install frontend dependencies (if not already done):**
+   ```bash
+   npm install
+   ```
+
+3. **Start the frontend dev server:**
+   ```bash
+   npm run dev
+   ```
+
+   The frontend will start on `http://localhost:8080` and automatically proxy API requests to the backend.
+
+### Quick Start (Both Servers)
+
+**Terminal 1 - Backend:**
+```bash
+cd server
+npm install
+npm run dev
+```
+
+**Terminal 2 - Frontend:**
+```bash
+npm install
+npm run dev
+```
+
+Then open `http://localhost:8080` in your browser.
+
+## API Endpoints
+
+The backend exposes the following REST API endpoints:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/sim/session/init` | Initialize new simulation session |
+| `POST` | `/api/sim/session/:id/enroll` | Generate and store CRPs |
+| `POST` | `/api/sim/session/:id/authenticate` | Verify device identity |
+| `POST` | `/api/sim/session/:id/key-exchange` | Perform Diffie-Hellman key exchange |
+| `POST` | `/api/sim/session/:id/provision` | Send encrypted credentials |
+| `POST` | `/api/sim/session/:id/operation` | Simulate secure communication |
+| `POST` | `/api/sim/session/:id/reset` | Reset session state |
+| `GET` | `/api/sim/session/:id` | Get session info (debug) |
+| `DELETE` | `/api/sim/session/:id` | Delete session |
+| `GET` | `/health` | Health check endpoint |
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).
@@ -52,13 +158,18 @@ npm run dev
 
 ## What technologies are used for this project?
 
-This project is built with:
+### Frontend
+- **Vite** - Fast build tool and dev server
+- **TypeScript** - Type-safe JavaScript
+- **React** - UI framework
+- **shadcn-ui** - High-quality UI components
+- **Tailwind CSS** - Utility-first CSS framework
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Backend
+- **Node.js** - JavaScript runtime
+- **Express** - Web application framework
+- **TypeScript** - Type-safe JavaScript
+- **crypto (Node.js)** - Cryptographic operations (SHA-256, AES-256-GCM, Diffie-Hellman)
 
 ## How can I deploy this project?
 
